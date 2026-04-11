@@ -24,6 +24,13 @@ class AirdoxCube {
     this.analyser = null;
     this.audio = null;
     this.currentTrackIndex = -1;
+    this.mixes = [
+      { name: 'VOID TRANSMISSION', meta: '2025  ·  1:58:00', src: '/audio/track1.mp3' },
+      { name: 'DARK MATTER LIVE', meta: 'Tresor 2024  ·  2:14:30', src: '/audio/track2.mp3' },
+      { name: 'SUBTERRANEAN', meta: '2024  ·  1:42:15', src: '/audio/track3.mp3' },
+      { name: 'FREQ COLLAPSE', meta: '2023  ·  1:28:44', src: '/audio/track4.mp3' },
+      { name: 'BERGHAIN SET', meta: '2023  ·  3:05:00', src: '/audio/track5.mp3' },
+    ];
 
     this.faceAngles = [
       { x: 0, y: 0 },
@@ -194,6 +201,12 @@ class AirdoxCube {
 
     const tex = new THREE.CanvasTexture(c);
     tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    
+    if (index === 2) {
+      this.liveCtx = ctx;
+      this.liveTexture = tex;
+    }
+    
     return tex;
   }
 
@@ -251,32 +264,85 @@ class AirdoxCube {
     ctx.fillStyle = '#00ffea';
     ctx.fillText('Live Sets', 64, 170);
 
-    const mixes = [
-      { name: 'VOID TRANSMISSION 009', meta: '2025  ·  1:58:00' },
-      { name: 'DARK MATTER — LIVE', meta: 'Tresor 2024  ·  2:14:30' },
-      { name: 'SUBTERRANEAN CURRENTS', meta: '2024  ·  1:42:15' },
-      { name: 'FREQUENCY COLLAPSE', meta: '2023  ·  1:28:44' },
-      { name: 'AIRDOX @ BERGHAIN', meta: '2023  ·  3:05:00' },
-    ];
-
-    mixes.forEach((m, i) => {
+    this.mixes.forEach((m, i) => {
+      const isPlaying = (this.currentTrackIndex === i && this.audio && !this.audio.paused);
+      const xObj = 650;
       const y = 300 + i * 115;
-      ctx.beginPath(); ctx.arc(90, y + 20, 20, 0, Math.PI * 2);
-      ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 2; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(84, y + 8); ctx.lineTo(84, y + 32); ctx.lineTo(102, y + 20); ctx.closePath();
-      ctx.fillStyle = '#00d4ff'; ctx.fill();
-
-      ctx.font = '600 28px Outfit, sans-serif'; ctx.fillStyle = '#e0e4ec'; ctx.fillText(m.name, 130, y);
-      ctx.font = '300 20px "JetBrains Mono", monospace'; ctx.fillStyle = '#8890a0'; ctx.fillText(m.meta, 130, y + 38);
-
-      for (let b = 0; b < 18; b++) {
-        const bh = Math.random() * 32 + 4;
-        ctx.fillStyle = `rgba(0,212,255,${0.2 + Math.random() * 0.4})`;
-        ctx.fillRect(760 + b * 13, y + 20 - bh / 2, 5, bh);
+      
+      ctx.beginPath(); ctx.arc(xObj, y + 20, 20, 0, Math.PI * 2);
+      ctx.strokeStyle = isPlaying ? '#ff00aa' : '#00d4ff'; 
+      ctx.lineWidth = 2; ctx.stroke();
+      
+      if (isPlaying) {
+         ctx.fillStyle = '#ff00aa'; 
+         ctx.fillRect(xObj - 6, y + 10, 4, 18);
+         ctx.fillRect(xObj + 2, y + 10, 4, 18);
+      } else {
+         ctx.beginPath(); ctx.moveTo(xObj - 4, y + 8); ctx.lineTo(xObj - 4, y + 32); ctx.lineTo(xObj + 10, y + 20); ctx.closePath();
+         ctx.fillStyle = '#00d4ff'; ctx.fill();
       }
-      ctx.fillStyle = 'rgba(200,205,216,0.06)'; ctx.fillRect(64, y + 85, W - 128, 1);
+
+      ctx.font = isPlaying ? '900 24px Orbitron, sans-serif' : '600 24px Outfit, sans-serif'; 
+      ctx.fillStyle = isPlaying ? '#fff' : '#e0e4ec'; 
+      ctx.fillText(m.name, xObj + 40, y);
+      
+      ctx.font = '300 16px "JetBrains Mono", monospace'; 
+      ctx.fillStyle = isPlaying ? '#ff00aa' : '#8890a0'; 
+      ctx.fillText(m.meta, xObj + 40, y + 34);
+
+      ctx.fillStyle = 'rgba(200,205,216,0.06)'; ctx.fillRect(xObj - 20, y + 85, W - xObj, 1);
     });
   }
+
+  redrawLiveSetsFull() {
+    if (!this.liveCtx) return;
+    const ctx = this.liveCtx;
+    const W = 1024;
+    
+    // Reset Transform
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(2, 2); // default power of two scale
+    
+    ctx.clearRect(0, 0, W, W);
+    ctx.fillStyle = '#0a0a18';
+    ctx.fillRect(0, 0, W, W);
+
+    const grad = ctx.createLinearGradient(0, 0, W, W);
+    grad.addColorStop(0, 'rgba(0,212,255,0.06)');
+    grad.addColorStop(1, 'rgba(255,0,170,0.06)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, W);
+
+    ctx.strokeStyle = 'rgba(200,205,216,0.12)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(32, 32, W - 64, W - 64);
+
+    ctx.strokeStyle = 'rgba(0,212,255,0.3)';
+    ctx.lineWidth = 1;
+    const tl = 40;
+    [[32,32,1,1],[W-32,32,-1,1],[32,W-32,1,-1],[W-32,W-32,-1,-1]].forEach(([x,y,dx,dy]) => {
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+tl*dx,y); ctx.moveTo(x,y); ctx.lineTo(x,y+tl*dy); ctx.stroke();
+    });
+
+    ctx.save(); ctx.globalAlpha = 0.04;
+    ctx.font = '900 280px Orbitron, sans-serif';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#c8cdd8';
+    ctx.fillText(`03`, W - 60, W - 40);
+    ctx.restore();
+
+    ctx.font = '400 24px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#00d4ff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(`03  ·  LIVE SETS`, 64, 56);
+    ctx.fillStyle = 'rgba(0,212,255,0.4)';
+    ctx.fillRect(64, 92, 220, 1);
+
+    ctx.textBaseline = 'top';
+    this.drawLiveSets(ctx, W);
+    
+    if (this.liveTexture) this.liveTexture.needsUpdate = true;
+  }
+
 
   drawGigs(ctx, W) {
     ctx.font = '700 72px Orbitron, sans-serif';
@@ -523,16 +589,15 @@ class AirdoxCube {
       const boxMap = [1, 3, 4, 5, 0, 2];
       const clickedFace = boxMap[faceIndexBox];
       
-      // If Live Sets
       if (clickedFace === 2) {
         const uv = intersects[0].uv;
         const texX = uv.x * 1024;
         const texY = (1 - uv.y) * 1024;
         
         for (let i = 0; i < 5; i++) {
-          const btnY = 300 + i * 115;
-          // Play button area roughly x:60-120, y:btnY..btnY+40
-          if (texX > 60 && texX < 140 && texY > btnY && texY < btnY + 40) {
+          const y = 300 + i * 115;
+          // Play button area roughly x:610-1000, y:y-20..y+60 (since X is 650)
+          if (texX > 610 && texX < 1000 && texY > y - 20 && texY < y + 60) {
             this.playTrack(i);
             break;
           }
@@ -557,15 +622,139 @@ class AirdoxCube {
     
     if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
     
-    if (this.currentTrackIndex === index && !this.audio.paused) {
-      this.audio.pause();
+    if (this.currentTrackIndex === index) {
+      if (this.audio.paused) this.audio.play();
+      else this.audio.pause();
+      this.redrawLiveSetsFull();
+      this.renderEqualizer(); // force exact state render
       return;
     }
     
     this.currentTrackIndex = index;
-    // Royalty Free Platzhalter Audio für den Test
-    this.audio.src = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"; 
-    this.audio.play().catch(e => console.log("Audio Play blocked: ", e));
+    this.audio.src = this.mixes[index].src; 
+    this.audio.play()
+      .then(() => {
+        this.redrawLiveSetsFull();
+        this.renderEqualizer();
+      })
+      .catch(e => console.log("Audio Play blocked: ", e));
+    this.redrawLiveSetsFull(); // sofort triggern für Loading-Status
+    this.renderEqualizer();
+  }
+
+  renderEqualizer() {
+    if (!this.liveCtx || !this.analyser) return;
+    const ctx = this.liveCtx;
+    const W = 1024;
+    
+    const cx = 350;
+    const cy = 520;
+    const rBase = 160;
+
+    ctx.save();
+    
+    // Reset scale to logical coordinates
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(2, 2);
+
+    // We only clear the EQ region to save performance
+    // Rectangle: x=40, y=180, w=580, h=750
+    ctx.beginPath();
+    ctx.rect(40, 180, 580, 750);
+    ctx.clip();
+    
+    // Clear & background
+    ctx.clearRect(40, 180, 580, 750);
+    ctx.fillStyle = '#0a0a18';
+    ctx.fillRect(40, 180, 580, 750);
+
+    const grad = ctx.createLinearGradient(0, 0, W, W);
+    grad.addColorStop(0, 'rgba(0,212,255,0.06)');
+    grad.addColorStop(1, 'rgba(255,0,170,0.06)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(40, 180, 580, 750);
+
+    // Draw Radial EQ
+    this.analyser.getByteFrequencyData(this.freqData);
+    
+    ctx.translate(cx, cy);
+
+    // Inner glowing ring
+    ctx.beginPath();
+    ctx.arc(0, 0, rBase - 20, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
+    ctx.stroke();
+
+    // Bars
+    // freqData has 256. We only use lower 120 to get bass/mids
+    const numBars = 64; 
+    const angleStep = (Math.PI * 2) / numBars;
+
+    ctx.lineCap = 'round';
+    
+    let sumBass = 0;
+    for (let i = 0; i < 6; i++) sumBass += this.freqData[i];
+    let bassIntensity = sumBass / (6 * 255); // 0 to 1
+
+    for (let i = 0; i < numBars; i++) {
+        const freqIndex = Math.floor(i * (120 / numBars));
+        const val = Math.max(0, (this.freqData[freqIndex] - 30) / 225.0); // 0 to 1, slight noise gate
+        
+        const rStart = rBase;
+        const rEnd = rBase + val * 160; // max length 160
+        
+        const angle = i * angleStep - Math.PI/2;
+        
+        ctx.beginPath();
+        ctx.moveTo(rStart * Math.cos(angle), rStart * Math.sin(angle));
+        ctx.lineTo(rEnd * Math.cos(angle), rEnd * Math.sin(angle));
+        
+        // Color gradient based on val
+        ctx.lineWidth = 6;
+        if (val > 0.75) {
+           ctx.strokeStyle = '#00ffea'; // Cyan peak
+           ctx.shadowColor = '#00ffea';
+        } else if (val > 0.4) {
+           ctx.strokeStyle = '#ff00aa'; // Pink mid
+           ctx.shadowColor = '#ff00aa';
+        } else {
+           ctx.strokeStyle = '#00d4ff'; // Blue low
+           ctx.shadowColor = '#00d4ff';
+        }
+        ctx.shadowBlur = 15;
+        ctx.stroke();
+    }
+    
+    // Center pulse
+    ctx.beginPath();
+    const pulseRad = 15 + (bassIntensity * (rBase - 35));
+    ctx.arc(0, 0, Math.max(10, pulseRad), 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0, 212, 255, ${bassIntensity * 0.5})`;
+    ctx.shadowBlur = pulseRad !== 10 ? 40 * bassIntensity : 0;
+    ctx.shadowColor = '#00d4ff';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    
+    // Draw running track text inside the circle
+    if (this.currentTrackIndex !== -1 && !this.audio.paused) {
+       ctx.rotate(this.clock.getElapsedTime() * 0.5); // spin slowly
+       ctx.font = '600 16px "JetBrains Mono", monospace';
+       ctx.fillStyle = '#ffffff';
+       ctx.textAlign = 'center';
+       ctx.textBaseline = 'middle';
+       ctx.fillText("▶ PLAY", 0, -rBase + 60);
+       ctx.fillText("AIRDOX", 0, rBase - 60);
+    } else {
+       ctx.font = '700 22px "JetBrains Mono", monospace';
+       ctx.fillStyle = 'rgba(0, 212, 255, 0.6)';
+       ctx.textAlign = 'center';
+       ctx.textBaseline = 'middle';
+       ctx.fillText("READY", 0, 0);
+    }
+    
+    ctx.restore();
+    if (this.liveTexture) this.liveTexture.needsUpdate = true;
   }
 
   coastThenSnap() {
@@ -733,6 +922,10 @@ class AirdoxCube {
     
     if (playing) {
       this.analyser.getByteFrequencyData(this.freqData);
+      
+      // Update EQ Visualizer dynamically every frame!
+      this.renderEqualizer();
+      
       let sum = 0;
       for (let i = 0; i < 6; i++) sum += this.freqData[i];
       bass = (sum / 6) / 255;
