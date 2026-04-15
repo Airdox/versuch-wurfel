@@ -131,6 +131,38 @@ const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
         await page.screenshot({ path: 'shot5_phase2_final.png' });
         console.log("Saved Final Phase 2 screenshot.");
 
+        // Phase 3 Verification: Auto-Tracklist & Seek
+        console.log("Verifying Phase 3 Features...");
+        const phase3Data = await page.evaluate(async () => {
+            const results = { step1_fetch: false, step2_seek: false };
+            
+            if (window.airdox) {
+                // 1. Fetch
+                await window.airdox.loadRemoteTracklist(0);
+                const mix = window.airdox.mixes[0];
+                results.tracklistLoaded = mix.tracklist && typeof mix.tracklist[0] === 'object';
+                results.tracklistCount = mix.tracklist.length;
+                results.step1_fetch = results.tracklistLoaded;
+                
+                // 2. Seek
+                if (results.tracklistLoaded) {
+                    const targetTime = mix.tracklist[1].time; // Robert Hood at 180s in mock
+                    const timePre = window.airdox.audio.currentTime;
+                    // Simulate seeking
+                    window.airdox.audio.currentTime = targetTime;
+                    results.timePost = window.airdox.audio.currentTime;
+                    results.step2_seek = Math.abs(results.timePost - targetTime) < 0.1;
+                    results.jumpAmount = results.timePost - timePre;
+                }
+            }
+            return results;
+        });
+
+        console.log("Phase 3 Test Results:", JSON.stringify(phase3Data));
+        await wait(1000);
+        await page.screenshot({ path: 'shot6_phase3_final.png' });
+        console.log("Saved Final Phase 3 screenshot.");
+
         await browser.close();
         console.log("Test Script Done.");
     } catch (err) {

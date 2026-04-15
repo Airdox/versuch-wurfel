@@ -65,6 +65,10 @@ class AirdoxCube {
       { x: -Math.PI / 2, y: 0 }, // 5: BOOKING (-Y Face)
     ];
 
+    // Tracklist Load States
+    this.tracklistCache = {};
+    this.loadingIndices = new Set();
+
     this.tiltX = -0.28;
     this.tiltY = 0.35;
 
@@ -560,12 +564,29 @@ class AirdoxCube {
       currentY += 70;
       
       if (isExpanded && m.tracklist) {
-          m.tracklist.forEach((tName, tIdx) => {
-             ctx.font = '300 13px "JetBrains Mono", monospace';
-             ctx.fillStyle = '#8890a0';
-             ctx.fillText(tName, xObj + 40, currentY + 5);
+          const isScanning = this.loadingIndices.has(i);
+          if (isScanning) {
+             ctx.font = 'italic 300 13px "JetBrains Mono", monospace';
+             ctx.fillStyle = '#00ffea';
+             ctx.fillText('DISCOVERING TRACKLIST...', xObj + 40, currentY + 5);
              currentY += 30;
-          });
+          } else {
+             m.tracklist.forEach((t, tIdx) => {
+                ctx.font = '300 13px "JetBrains Mono", monospace';
+                const isObj = typeof t === 'object' && t.timestamp;
+                const text = isObj ? `[${t.timestamp}] ${t.display}` : t;
+                
+                ctx.fillStyle = isObj ? '#e0e4ec' : '#8890a0';
+                if (isObj && isPlaying) {
+                   const isNow = (this.audio.currentTime >= t.time && 
+                                  (tIdx === m.tracklist.length - 1 || this.audio.currentTime < m.tracklist[tIdx+1].time));
+                   if (isNow) ctx.fillStyle = '#ff00aa'; 
+                }
+                
+                ctx.fillText(text, xObj + 40, currentY + 5);
+                currentY += 30;
+             });
+          }
           currentY += 20;
       }
     });
@@ -962,21 +983,38 @@ class AirdoxCube {
         let clickedPlaylist = false;
         let startY = 200;
         for (let i = 0; i < this.mixes.length; i++) {
+          const m = this.mixes[i];
           const isExpanded = this.expandedTrackIndex === i;
-          const expandedHeight = (isExpanded && this.mixes[i].tracklist) ? this.mixes[i].tracklist.length * 30 + 20 : 0;
+          const expandedHeight = (isExpanded && m.tracklist) ? m.tracklist.length * 30 + 20 : 0;
           
-          if (texX > 80 && texX < 500 && texY >= 180 && texY <= 900) { // strictly inside clip
+          if (texX > 80 && texX < 500 && texY >= 180 && texY <= 900) {
             const adjustedTexY = texY + Math.floor(this.listScrollY);
+            
+            // 1. Header Click (Expand/Play)
             if (adjustedTexY > startY - 20 && adjustedTexY < startY + 50) {
-               // Hit target detection: Did they click [+] right side or the name left side?
                if (texX >= 430) {
                    this.expandedTrackIndex = isExpanded ? -1 : i;
+                   if (this.expandedTrackIndex === i) this.loadRemoteTracklist(i);
                    this.redrawLiveSetsFull();
                } else {
                    this.playTrack(i);
                }
                clickedPlaylist = true;
                break;
+            }
+            
+            // 2. Tracklist Item Click (Seek)
+            if (isExpanded && adjustedTexY > startY + 50 && adjustedTexY < startY + 50 + expandedHeight) {
+                const itemIdx = Math.floor((adjustedTexY - startY - 50) / 30);
+                const track = m.tracklist[itemIdx];
+                if (track && typeof track === 'object' && track.time !== undefined) {
+                    if (this.currentTrackIndex !== i) this.playTrack(i);
+                    this.audio.currentTime = track.time;
+                    this.showToast(`Seeking to ${track.timestamp}`);
+                    this.paintFace(2);
+                }
+                clickedPlaylist = true;
+                break;
             }
           }
           startY += 70 + expandedHeight;
@@ -1139,6 +1177,40 @@ class AirdoxCube {
         toast.classList.remove('visible');
         setTimeout(() => toast.remove(), 500);
     }, 3000);
+  }
+
+  async loadRemoteTracklist(index) {
+    const mix = this.mixes[index];
+    if (!mix || this.loadingIndices.has(index) || (mix.tracklist && mix.tracklist.some(t => typeof t === 'object'))) return;
+
+    this.loadingIndices.add(index);
+    this.paintFace(2);
+
+    try {
+      // First try local /data/ folder
+      const response = await fetch(`./data/tracklist_${mix.id}.json`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.tracklist) {
+          mix.tracklist = data.tracklist;
+          this.showToast(`Synced Tracklist for ${mix.name}`);
+        }
+      } else {
+        // Fallback: Check R2 directly? (Assuming public access for JSONs)
+        const AUDIO_BASE = 'https://pub-c65c35191de241338a08b07b45f1495f.r2.dev/public';
+        const r2Res = await fetch(`${AUDIO_BASE}/tracklist_${mix.id}.json`);
+        if (r2Res.ok) {
+           const r2Data = await r2Res.json();
+           mix.tracklist = r2Data.tracklist;
+           this.showToast(`Fetched R2 Tracklist`);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load tracklist sidecar:", e);
+    } finally {
+      this.loadingIndices.delete(index);
+      this.paintFace(2);
+    }
   }
 
   drawTimeline() {

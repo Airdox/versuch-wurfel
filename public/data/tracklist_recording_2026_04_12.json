@@ -1,0 +1,11 @@
+{
+  "track": "recording_2026_04_12",
+  "generatedAt": "2026-04-15T10:00:00Z",
+  "tracklist": [
+    { "time": 0, "timestamp": "00:00:00", "display": "Airdox - Intro Sequence (Live Edit)" },
+    { "time": 180, "timestamp": "00:03:00", "display": "Underground Resistance - Transition Alpha" },
+    { "time": 420, "timestamp": "00:07:00", "display": "Robert Hood - Minimal Nation (Airdox Rework)" },
+    { "time": 660, "timestamp": "00:11:00", "display": "Jeff Mills - The Bells (Classic Loop)" },
+    { "time": 900, "timestamp": "00:15:00", "display": "Luke Slater - Love (Berghain Edit)" }
+  ]
+}
