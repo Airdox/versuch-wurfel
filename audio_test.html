@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<body>
+<button id="btn">PLAY TRACK</button>
+<div id="log"></div>
+<script>
+function log(msg) {
+    document.getElementById('log').innerHTML += '<div>' + msg + '</div>';
+    console.log(msg);
+}
+
+document.getElementById('btn').addEventListener('click', () => {
+    log('Button clicked');
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioCtx.createAnalyser();
+        const audio = new Audio();
+        audio.crossOrigin = "anonymous";
+        document.body.appendChild(audio);
+
+        const source = audioCtx.createMediaElementSource(audio);
+        source.connect(analyser);
+        analyser.connect(audioCtx.destination);
+        
+        audioCtx.resume().then(() => log("Ctx resumed")).catch(e => log("Ctx resume error: " + e));
+        
+        audio.src = 'https://pub-c65c35191de241338a08b07b45f1495f.r2.dev/public/Airdox_REC_2026_04_12.mp3';
+        log('Call play()...');
+        
+        audio.play().then(() => {
+            log('Play success!');
+        }).catch(err => {
+            log('Play error: ' + err.name + " - " + err.message);
+        });
+
+    } catch(e) {
+        log('Catch error: ' + e);
+    }
+});
+</script>
+</body>
+</html>

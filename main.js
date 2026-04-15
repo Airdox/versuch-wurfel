@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { gsap } from 'gsap';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 document.fonts.ready.then(() => new AirdoxCube());
 
@@ -9,7 +14,7 @@ class AirdoxCube {
     this.scene = new THREE.Scene();
 
     this.currentFace = 0;
-    this.faceNames = ['IDENTITY', 'ABOUT', 'LIVE SETS', 'GIGS', 'SOCIAL', 'BOOKING'];
+    this.faceNames = ['IDENTITY', 'ABOUT', 'LIVE SETS', 'STUDIO', 'SOCIAL', 'BOOKING'];
     this.isDragging = false;
     this.is2DMode = false;
     this.dragStart = { x: 0, y: 0, time: 0 };
@@ -24,12 +29,22 @@ class AirdoxCube {
     this.analyser = null;
     this.audio = null;
     this.currentTrackIndex = -1;
+    this.expandedTrackIndex = -1;
+    this.listScrollY = 0;
+    this.targetListScrollY = 0;
+    const AUDIO_BASE = 'https://pub-c65c35191de241338a08b07b45f1495f.r2.dev/public';
     this.mixes = [
-      { name: 'VOID TRANSMISSION', meta: '2025  ·  1:58:00', src: '/audio/track1.mp3' },
-      { name: 'DARK MATTER LIVE', meta: 'Tresor 2024  ·  2:14:30', src: '/audio/track2.mp3' },
-      { name: 'SUBTERRANEAN', meta: '2024  ·  1:42:15', src: '/audio/track3.mp3' },
-      { name: 'FREQ COLLAPSE', meta: '2023  ·  1:28:44', src: '/audio/track4.mp3' },
-      { name: 'BERGHAIN SET', meta: '2023  ·  3:05:00', src: '/audio/track5.mp3' },
+      { id: 'recording_2026_04_12', name: 'REC 12.04.2026', meta: 'APR 2026  ·  2:30:15', src: `${AUDIO_BASE}/Airdox_REC_2026_04_12.mp3`, tracklist: ['01. Intro - Awakening', '02. Industrial Sector', '03. Raw Cyberpunk Tool', '04. Acid 303 Injection', '05. Outro Sequence'] },
+      { id: 'recording_2026_03_15', name: 'REC 15.03.2026', meta: 'MAR 2026  ·  1:36:22', src: `${AUDIO_BASE}/Airdox_REC_2026_03_15.mp3`, tracklist: ['01. Deep Space', '02. Berlin Underground', '03. Dark Matter', '04. Hypnotic State'] },
+      { id: 'recording_2026_03_09', name: 'KEINEN GRUND HAT', meta: 'MAR 2026  ·  50:23', src: `${AUDIO_BASE}/Airdox_REC_2026_03_09.mp3`, tracklist: ['01. Start', '02. Hard Groove', '03. Peak Time', '04. Fade'] },
+      { id: 'secret_set_2025_12_22', name: 'SECRET SET', meta: '22.12.2025  ·  2:46:56', src: `${AUDIO_BASE}/Airdox_Secret_Set_Pirate_Studio_22_12_2025_full.mp3`, tracklist: ['01. Unknown Artist - ID', '02. Airdox - Custom Tool', '03. Basement Jam', '04. Early Morning Vibes'] },
+      { id: '0', name: 'PIRATE (17.12.)', meta: '17.12.2025  ·  1:05:00', src: `${AUDIO_BASE}/Airdox%20Pirate%20Studio_17.12.2025.mp3`, tracklist: ['01. Live Jam 1', '02. TR-909 Workout', '03. Modular Chaos'] },
+      { id: '1', name: 'PIRATE (OLD)', meta: 'DEC 2025  ·  1:02:34', src: `${AUDIO_BASE}/Airdox%20Pirate-Studio%203_12_2025.mp3`, tracklist: ['01. Classic Set', '02. Detroit Influences'] },
+      { id: '2', name: 'OVER AND OUT', meta: 'FEB 2024  ·  58:22', src: `${AUDIO_BASE}/Over%20and%20OUt_full.mp3`, tracklist: ['01. Last Track Initial', '02. Overdrive', '03. Out'] },
+      { id: '3', name: '65', meta: 'JAN 2024  ·  1:05:00', src: `${AUDIO_BASE}/65_full.mp3`, tracklist: ['01. 65 Intro', '02. Drumcode Style', '03. Heavy Kicks'] },
+      { id: '4', name: 'TSCHAU MÄRKISCHE', meta: 'MAR 2024  ·  45:18', src: `${AUDIO_BASE}/Airdox_tschau_m%C3%A4rkische_full.mp3`, tracklist: ['01. Farewell', '02. Melancholy', '03. The End of an Era'] },
+      { id: '5', name: 'OHBOY', meta: 'APR 2024  ·  52:45', src: `${AUDIO_BASE}/ohboy_full.mp3`, tracklist: ['01. Oh Boy', '02. What a Night', '03. Bounce'] },
+      { id: '6', name: 'SOLLTE NICHT SEIN', meta: 'FEB 2025  ·  2:49:00', src: `${AUDIO_BASE}/Airdox%20vs%20Jette_sollte%20nicht%20sein_2024_02_full.mp3`, tracklist: ['01. Intro - B2B', '02. Jette Selects', '03. Airdox Push', '04. Closing'] }
     ];
 
     this.faceAngles = [
@@ -49,9 +64,12 @@ class AirdoxCube {
     this.initLights();
     this.initParticles();
     this.initCube();
+    this.initPostProcessing();
     this.initInteraction();
     this.initHamburger();
     this.initCursor();
+    this.initBgVisualizer();
+    this.initGlobalPlayer();
     this.runLoader();
     this.onResize();
     window.addEventListener('resize', () => this.onResize());
@@ -96,12 +114,19 @@ class AirdoxCube {
   //  PARTICLES
   // ════════════════════════════════════
   initParticles() {
-    const count = 600;
+    const count = 800;
     const positions = new Float32Array(count * 3);
+    this._particleBasePositions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 20;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
+      const x = (Math.random() - 0.5) * 20;
+      const y = (Math.random() - 0.5) * 20;
+      const z = (Math.random() - 0.5) * 20;
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+      this._particleBasePositions[i * 3] = x;
+      this._particleBasePositions[i * 3 + 1] = y;
+      this._particleBasePositions[i * 3 + 2] = z;
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -118,13 +143,34 @@ class AirdoxCube {
   // ════════════════════════════════════
   initCube() {
     const size = 2.2;
+
+    // ── C1: Environment Map (dark nebula HDR-like) ──
+    const envCanvas = document.createElement('canvas');
+    envCanvas.width = 256; envCanvas.height = 256;
+    const ectx = envCanvas.getContext('2d');
+    const envGrad = ectx.createRadialGradient(128, 128, 0, 128, 128, 180);
+    envGrad.addColorStop(0, '#111122');
+    envGrad.addColorStop(0.4, '#080814');
+    envGrad.addColorStop(0.7, '#050510');
+    envGrad.addColorStop(1, '#020208');
+    ectx.fillStyle = envGrad;
+    ectx.fillRect(0, 0, 256, 256);
+    // Add some faint "stars"
+    for (let i = 0; i < 60; i++) {
+      ectx.fillStyle = `rgba(${150 + Math.random()*105}, ${180 + Math.random()*75}, 255, ${0.15 + Math.random()*0.25})`;
+      ectx.fillRect(Math.random()*256, Math.random()*256, 1, 1);
+    }
+    const envTex = new THREE.CanvasTexture(envCanvas);
+    envTex.mapping = THREE.EquirectangularReflectionMapping;
+
     const materials = [];
     for (let i = 0; i < 6; i++) {
       materials.push(new THREE.MeshPhysicalMaterial({
         map: this.paintFace(i),
-        roughness: 0.15, metalness: 0.6,
-        clearcoat: 0.4, clearcoatRoughness: 0.2,
+        roughness: 0.12, metalness: 0.7,
+        clearcoat: 0.5, clearcoatRoughness: 0.15,
         transparent: true, opacity: 0.97,
+        envMap: envTex, envMapIntensity: 0.6,
       }));
     }
     const ordered = [materials[1], materials[3], materials[4], materials[5], materials[0], materials[2]];
@@ -137,8 +183,184 @@ class AirdoxCube {
     this.edgeLines = new THREE.LineSegments(edgeGeo, edgeMat);
     this.cube.add(this.edgeLines);
 
+    // ── A2: Reflection Plane ──
+    const planeGeo = new THREE.PlaneGeometry(12, 12);
+    const planeMat = new THREE.MeshPhysicalMaterial({
+      color: 0x020210,
+      roughness: 0.2, metalness: 0.9,
+      transparent: true, opacity: 0.4,
+      envMap: envTex, envMapIntensity: 0.3,
+    });
+    this.reflectionPlane = new THREE.Mesh(planeGeo, planeMat);
+    this.reflectionPlane.rotation.x = -Math.PI / 2;
+    this.reflectionPlane.position.y = -1.5;
+    this.scene.add(this.reflectionPlane);
+
     this.cube.rotation.x = this.tiltX;
     this.cube.rotation.y = this.tiltY;
+  }
+
+  // ════════════════════════════════════
+  //  A1: POST-PROCESSING (Bloom + Chromatic Aberration)
+  // ════════════════════════════════════
+  initPostProcessing() {
+    this.composer = new EffectComposer(this.renderer);
+    
+    const renderPass = new RenderPass(this.scene, this.camera);
+    this.composer.addPass(renderPass);
+
+    // Bloom — gives neon edges their glow
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.4,   // strength (subtle)
+      0.6,   // radius
+      0.85   // threshold (only bright stuff blooms)
+    );
+    this.composer.addPass(this.bloomPass);
+
+    // Chromatic Aberration — subtle RGB split
+    const chromaticAberrationShader = {
+      uniforms: {
+        tDiffuse: { value: null },
+        uOffset: { value: new THREE.Vector2(0.001, 0.001) },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 uOffset;
+        varying vec2 vUv;
+        void main() {
+          float r = texture2D(tDiffuse, vUv + uOffset).r;
+          float g = texture2D(tDiffuse, vUv).g;
+          float b = texture2D(tDiffuse, vUv - uOffset).b;
+          float a = texture2D(tDiffuse, vUv).a;
+          gl_FragColor = vec4(r, g, b, a);
+        }
+      `,
+    };
+    this.chromaticPass = new ShaderPass(chromaticAberrationShader);
+    this.composer.addPass(this.chromaticPass);
+
+    // C2: Glitch Shader — CRT distortion bursts
+    const glitchShader = {
+      uniforms: {
+        tDiffuse: { value: null },
+        uTime: { value: 0 },
+        uIntensity: { value: 0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float uTime;
+        uniform float uIntensity;
+        varying vec2 vUv;
+        
+        float rand(vec2 co) {
+          return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+        }
+        
+        void main() {
+          vec2 uv = vUv;
+          
+          // Horizontal displacement
+          float lineJitter = step(0.99, rand(vec2(uTime * 0.1, floor(uv.y * 80.0)))) * uIntensity;
+          uv.x += lineJitter * (rand(vec2(uTime, uv.y)) - 0.5) * 0.15;
+          
+          // Color channel split on glitch
+          float splitAmount = uIntensity * 0.02;
+          float r = texture2D(tDiffuse, uv + vec2(splitAmount, 0.0)).r;
+          float g = texture2D(tDiffuse, uv).g;
+          float b = texture2D(tDiffuse, uv - vec2(splitAmount, 0.0)).b;
+          
+          // Scanline flicker
+          float scan = 1.0 - uIntensity * 0.15 * step(0.5, fract(uv.y * 300.0 + uTime * 5.0));
+          
+          gl_FragColor = vec4(r * scan, g * scan, b * scan, 1.0);
+        }
+      `,
+    };
+    this.glitchPass = new ShaderPass(glitchShader);
+    this.composer.addPass(this.glitchPass);
+
+    const outputPass = new OutputPass();
+    this.composer.addPass(outputPass);
+
+    // Glitch timing state
+    this._glitchTimer = 0;
+    this._glitchActive = false;
+    this._glitchDuration = 0;
+  }
+
+  // ════════════════════════════════════
+  //  B1: GLOBAL AUDIO PLAYER (DOM overlay)
+  // ════════════════════════════════════
+  initGlobalPlayer() {
+    const strip = document.createElement('div');
+    strip.id = 'global-player';
+    strip.innerHTML = `
+      <button id="gp-play" aria-label="Play/Pause">▶</button>
+      <div id="gp-info">
+        <span id="gp-title">No track selected</span>
+        <span id="gp-time">00:00 / 00:00</span>
+      </div>
+      <div id="gp-progress-wrap">
+        <div id="gp-progress"></div>
+      </div>
+    `;
+    document.body.appendChild(strip);
+
+    // Play/Pause toggle
+    strip.querySelector('#gp-play').addEventListener('click', () => {
+      if (!this.audio) return;
+      if (this.audio.paused) { this.audio.play(); }
+      else { this.audio.pause(); }
+      this.updateGlobalPlayer();
+      this.redrawLiveSetsFull();
+    });
+
+    // Click to seek on progress bar
+    strip.querySelector('#gp-progress-wrap').addEventListener('click', (e) => {
+      if (!this.audio || !this.audio.duration) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      this.audio.currentTime = this.audio.duration * Math.max(0, Math.min(1, pct));
+    });
+
+    this._gpVisible = false;
+  }
+
+  updateGlobalPlayer() {
+    const el = document.getElementById('global-player');
+    if (!el) return;
+    const btn = el.querySelector('#gp-play');
+    const title = el.querySelector('#gp-title');
+    const time = el.querySelector('#gp-time');
+    const prog = el.querySelector('#gp-progress');
+
+    if (this.currentTrackIndex === -1 || !this.audio) {
+      if (this._gpVisible) { el.classList.remove('visible'); this._gpVisible = false; }
+      return;
+    }
+
+    if (!this._gpVisible) { el.classList.add('visible'); this._gpVisible = true; }
+
+    btn.textContent = this.audio.paused ? '▶' : '⏸';
+    title.textContent = this.mixes[this.currentTrackIndex].name;
+
+    const fmt = (v) => {
+      if (isNaN(v) || !isFinite(v)) return '00:00';
+      const m = Math.floor(v / 60);
+      const s = Math.floor(v % 60);
+      return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+    };
+    time.textContent = `${fmt(this.audio.currentTime)} / ${fmt(this.audio.duration)}`;
+    prog.style.width = ((this.audio.currentTime / (this.audio.duration || 1)) * 100) + '%';
   }
 
   // ── PAINT FACE — BRIGHTER, MORE READABLE ──
@@ -182,7 +404,7 @@ class AirdoxCube {
     ctx.restore();
 
     // Label header
-    const labels = ['IDENTITY', 'ABOUT', 'LIVE SETS', 'GIGS', 'SOCIAL', 'BOOKING'];
+    const labels = ['IDENTITY', 'ABOUT', 'LIVE SETS', 'STUDIO', 'SOCIAL', 'BOOKING'];
     ctx.font = '400 24px "JetBrains Mono", monospace';
     ctx.fillStyle = '#00d4ff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillText(`0${index + 1}  ·  ${labels[index]}`, 64, 56);
@@ -194,7 +416,7 @@ class AirdoxCube {
       case 0: this.drawIdentity(ctx, W); break;
       case 1: this.drawAbout(ctx, W); break;
       case 2: this.drawLiveSets(ctx, W); break;
-      case 3: this.drawGigs(ctx, W); break;
+      case 3: this.drawStudio(ctx, W); break;
       case 4: this.drawSocial(ctx, W); break;
       case 5: this.drawBooking(ctx, W); break;
     }
@@ -241,57 +463,113 @@ class AirdoxCube {
     ctx.fillStyle = '#ffffff';
     ctx.fillText('About', 64, 170);
 
-    ctx.font = '300 30px Outfit, sans-serif';
-    ctx.fillStyle = '#c0c8d8';
-    ['AIRDOX navigiert durch die', 'dunklen Korridore von Techno,', 'Industrial und hypnotischen', 'Maschinenrhythmen.', '', 'Keine Labels. Keine Regeln.', 'Nur Frequenzen.'].forEach((l, i) => ctx.fillText(l, 64, 290 + i * 50));
+    ctx.font = '500 22px Outfit, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ['Der Sound AIRDOX steht für puristischen Berliner', 'Underground Techno – ohne Kompromisse. Treibende Rhythmen,', 'die die Tanzfläche stundenlang zum Kochen bringen.'].forEach((l, i) => ctx.fillText(l, 64, 280 + i * 36));
 
-    const stats = [['6+', 'YEARS'], ['138', 'AVG BPM'], ['40+', 'SETS'], ['8', 'CITIES']];
+    ctx.font = '300 20px Outfit, sans-serif';
+    ctx.fillStyle = '#a0a8b8';
+    
+    ctx.fillStyle = '#00d4ff'; ctx.font = '700 18px "JetBrains Mono", monospace'; ctx.fillText('DIE PRÄGUNG', 64, 430);
+    ctx.fillStyle = '#c0c8d8'; ctx.font = '300 18px Outfit, sans-serif';
+    ['Seine musikalische DNA wurde in den legendären Nächten des alten', 'Tresor geschrieben – genauer gesagt in der oberen Etage, im Alten Globus.', 'Nicht der raue Keller-Sound, sondern der cleane, energetische Techno', 'der Leipziger Straße 126A formte seine harte Ästhetik.'].forEach((l, i) => ctx.fillText(l, 64, 460 + i * 26));
+
+    ctx.fillStyle = '#00d4ff'; ctx.font = '700 18px "JetBrains Mono", monospace'; ctx.fillText('DER WEG & DIE VISION', 64, 590);
+    ctx.fillStyle = '#c0c8d8'; ctx.font = '300 18px Outfit, sans-serif';
+    ['Seit über zwei Jahrzehnten ist AIRDOX Teil der Szene.', 'Heute gilt seine gesamte Kraft der Musik – eine neue,', 'entschlossene Phase seiner Karriere hat begonnen, um', 'den absolut perfekten Moment auf der Tanzfläche zu erschaffen.'].forEach((l, i) => ctx.fillText(l, 64, 620 + i * 26));
+
+    const stats = [['50+', 'LIVE SETS'], ['138', 'AVG BPM'], ['10K+', 'LISTENERS'], ['BERLIN', 'BASED']];
     stats.forEach(([val, lbl], i) => {
       const x = 64 + i * 220;
-      ctx.font = '900 52px Orbitron, sans-serif';
-      const sg = ctx.createLinearGradient(x, 700, x + 80, 750);
+      ctx.font = '900 48px Orbitron, sans-serif';
+      const sg = ctx.createLinearGradient(x, 780, x + 80, 830);
       sg.addColorStop(0, '#00d4ff'); sg.addColorStop(1, '#ff00aa');
       ctx.fillStyle = sg;
-      ctx.fillText(val, x, 700);
-      ctx.font = '400 18px "JetBrains Mono", monospace';
+      ctx.fillText(val, x, 780);
+      ctx.font = '400 16px "JetBrains Mono", monospace';
       ctx.fillStyle = '#8890a0';
-      ctx.fillText(lbl, x, 768);
+      ctx.fillText(lbl, x, 840);
     });
   }
 
   drawLiveSets(ctx, W) {
-    ctx.font = '700 72px Orbitron, sans-serif';
+    ctx.font = '900 72px Orbitron, sans-serif';
     ctx.fillStyle = '#00ffea';
     ctx.fillText('Live Sets', 64, 170);
 
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 180, 520, 760); // Clip region for sliding playlist
+    ctx.clip();
+    
+    // Virtual Scroll
+    ctx.translate(0, -Math.floor(this.listScrollY));
+    
+    let currentY = 200;
+
     this.mixes.forEach((m, i) => {
       const isPlaying = (this.currentTrackIndex === i && this.audio && !this.audio.paused);
-      const xObj = 650;
-      const y = 300 + i * 115;
+      const isExpanded = this.expandedTrackIndex === i;
+      const xObj = 100; // far left
       
-      ctx.beginPath(); ctx.arc(xObj, y + 20, 20, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(xObj, currentY + 14, 14, 0, Math.PI * 2);
       ctx.strokeStyle = isPlaying ? '#ff00aa' : '#00d4ff'; 
-      ctx.lineWidth = 2; ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.stroke();
       
       if (isPlaying) {
          ctx.fillStyle = '#ff00aa'; 
-         ctx.fillRect(xObj - 6, y + 10, 4, 18);
-         ctx.fillRect(xObj + 2, y + 10, 4, 18);
+         ctx.fillRect(xObj - 4, currentY + 6, 3, 15);
+         ctx.fillRect(xObj + 1, currentY + 6, 3, 15);
       } else {
-         ctx.beginPath(); ctx.moveTo(xObj - 4, y + 8); ctx.lineTo(xObj - 4, y + 32); ctx.lineTo(xObj + 10, y + 20); ctx.closePath();
+         ctx.beginPath(); ctx.moveTo(xObj - 3, currentY + 5); ctx.lineTo(xObj - 3, currentY + 23); ctx.lineTo(xObj + 7, currentY + 14); ctx.closePath();
          ctx.fillStyle = '#00d4ff'; ctx.fill();
       }
 
-      ctx.font = isPlaying ? '900 24px Orbitron, sans-serif' : '600 24px Outfit, sans-serif'; 
+      ctx.font = isPlaying ? '900 20px Orbitron, sans-serif' : '600 18px Outfit, sans-serif'; 
       ctx.fillStyle = isPlaying ? '#fff' : '#e0e4ec'; 
-      ctx.fillText(m.name, xObj + 40, y);
+      ctx.fillText(m.name, xObj + 30, currentY);
       
-      ctx.font = '300 16px "JetBrains Mono", monospace'; 
+      ctx.font = '300 14px "JetBrains Mono", monospace'; 
       ctx.fillStyle = isPlaying ? '#ff00aa' : '#8890a0'; 
-      ctx.fillText(m.meta, xObj + 40, y + 34);
+      ctx.fillText(m.meta, xObj + 30, currentY + 26);
+      
+      // Draw accordion [+] / [-]
+      if (m.tracklist && m.tracklist.length > 0) {
+          ctx.font = '700 18px "JetBrains Mono", monospace';
+          ctx.fillStyle = isExpanded ? '#ff00aa' : 'rgba(0, 212, 255, 0.4)';
+          ctx.fillText(isExpanded ? '[-]' : '[+]', 440, currentY + 12);
+      }
 
-      ctx.fillStyle = 'rgba(200,205,216,0.06)'; ctx.fillRect(xObj - 20, y + 85, W - xObj, 1);
+      ctx.fillStyle = 'rgba(200,205,216,0.06)'; 
+      ctx.fillRect(64, currentY + 48, W - 580, 1); 
+      
+      currentY += 70;
+      
+      if (isExpanded && m.tracklist) {
+          m.tracklist.forEach((tName, tIdx) => {
+             ctx.font = '300 13px "JetBrains Mono", monospace';
+             ctx.fillStyle = '#8890a0';
+             ctx.fillText(tName, xObj + 40, currentY + 5);
+             currentY += 30;
+          });
+          currentY += 20;
+      }
     });
+    
+    // Draw scroll indicator line if scrolling needed
+    const expandedT = this.expandedTrackIndex !== -1 && this.mixes[this.expandedTrackIndex].tracklist ? this.mixes[this.expandedTrackIndex].tracklist.length * 30 + 20 : 0;
+    const maxScroll = Math.max(0, (this.mixes.length * 70) + expandedT - 700);
+    
+    if (maxScroll > 0) {
+       ctx.fillStyle = 'rgba(0,212,255,0.1)';
+       ctx.fillRect(72, 190 + this.listScrollY, 2, 600);
+       const h = Math.max(50, 600 * (700 / (700 + maxScroll)));
+       const yPos = 190 + this.listScrollY + (this.listScrollY / (maxScroll || 1)) * (600 - h);
+       ctx.fillStyle = '#00ffea';
+       ctx.fillRect(70, yPos, 6, h);
+    }
+    
+    ctx.restore();
   }
 
   redrawLiveSetsFull() {
@@ -340,35 +618,47 @@ class AirdoxCube {
     ctx.textBaseline = 'top';
     this.drawLiveSets(ctx, W);
     
+    if (this.currentTrackIndex !== -1) {
+       this.drawTimeline();
+    }
+    
     if (this.liveTexture) this.liveTexture.needsUpdate = true;
   }
 
 
-  drawGigs(ctx, W) {
+  drawStudio(ctx, W) {
     ctx.font = '700 72px Orbitron, sans-serif';
     ctx.fillStyle = '#ff00aa';
-    ctx.fillText('Upcoming', 64, 170);
+    ctx.fillText('Gear & Studio', 64, 170);
 
-    const gigs = [
-      { date: ['MAI', '02'], venue: 'Berghain', city: 'Berlin, DE' },
-      { date: ['MAI', '18'], venue: 'Tresor', city: 'Berlin, DE' },
-      { date: ['JUN', '07'], venue: 'De School', city: 'Amsterdam, NL' },
-      { date: ['JUN', '21'], venue: 'Fabric', city: 'London, UK' },
+    ctx.font = '400 22px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('HARDWARE / SYNTHS / DRUM MACHINES', 64, 240);
+    
+    ctx.fillStyle = 'rgba(255,0,170,0.4)';
+    ctx.fillRect(64, 270, 340, 1);
+
+    const gear = [
+      { name: 'ROLAND TR-909', desc: 'Analog Drum Synthesizer', type: 'DRUMS' },
+      { name: 'ELEKTRON ANALOG RYTM', desc: '8-Voice Drum Machine', type: 'DRUMS' },
+      { name: 'MOOG SUB 37', desc: 'Paraphonic Analog Synth', type: 'SYNTH' },
+      { name: 'ABLETON PUSH 3', desc: 'Standalone Instrument', type: 'CONTROLLER' },
+      { name: 'ALLEN & HEATH XONE:96', desc: 'Analog DJ Mixer', type: 'MIXER' },
     ];
 
-    gigs.forEach((g, i) => {
-      const y = 300 + i * 135;
-      ctx.fillStyle = 'rgba(255,0,170,0.1)'; ctx.fillRect(64, y - 10, 95, 85);
-      ctx.strokeStyle = 'rgba(255,0,170,0.3)'; ctx.lineWidth = 1; ctx.strokeRect(64, y - 10, 95, 85);
-      ctx.font = '400 20px "JetBrains Mono", monospace'; ctx.fillStyle = '#ff00aa'; ctx.textAlign = 'center';
-      ctx.fillText(g.date[0], 111, y + 8);
-      ctx.font = '700 40px Orbitron, sans-serif'; ctx.fillText(g.date[1], 111, y + 46);
-      ctx.textAlign = 'left';
-      ctx.font = '600 34px Outfit, sans-serif'; ctx.fillStyle = '#ffffff'; ctx.fillText(g.venue, 195, y + 8);
-      ctx.font = '300 22px "JetBrains Mono", monospace'; ctx.fillStyle = '#8890a0'; ctx.fillText(g.city, 195, y + 52);
-      ctx.strokeStyle = 'rgba(200,205,216,0.15)'; ctx.strokeRect(780, y + 8, 170, 48);
-      ctx.font = '400 18px "JetBrains Mono", monospace'; ctx.fillStyle = '#8890a0'; ctx.textAlign = 'center';
-      ctx.fillText('TICKETS →', 865, y + 26); ctx.textAlign = 'left';
+    gear.forEach((g, i) => {
+      const y = 320 + i * 110;
+      ctx.fillStyle = 'rgba(255,0,170,0.06)'; ctx.fillRect(64, y - 10, W - 128, 85);
+      ctx.strokeStyle = 'rgba(255,0,170,0.2)'; ctx.lineWidth = 1; ctx.strokeRect(64, y - 10, W - 128, 85);
+      
+      ctx.font = '400 16px "JetBrains Mono", monospace'; ctx.fillStyle = '#ff00aa';
+      ctx.fillText(g.type, 90, y + 25);
+      
+      ctx.font = '700 32px Orbitron, sans-serif'; ctx.fillStyle = '#ffffff';
+      ctx.fillText(g.name, 220, y + 16);
+      
+      ctx.font = '300 20px Outfit, sans-serif'; ctx.fillStyle = '#8890a0';
+      ctx.fillText(g.desc, 220, y + 46);
     });
   }
 
@@ -379,9 +669,9 @@ class AirdoxCube {
 
     const socials = [
       { icon: '☁', name: 'SoundCloud', handle: 'soundcloud.com/airdox' },
-      { icon: '📷', name: 'Instagram', handle: '@airdox.berlin' },
-      { icon: '𝕗', name: 'Facebook', handle: 'fb.com/airdoxberlin' },
-      { icon: '🎵', name: 'Mixcloud', handle: 'mixcloud.com/airdox' },
+      { icon: '🎵', name: 'Mixcloud', handle: 'mixcloud.com/Airdox' },
+      { icon: '📷', name: 'Instagram', handle: 'instagram.com/airdox_bln' },
+      { icon: '✉', name: 'Email', handle: 'airdox82@gmail.com' },
     ];
 
     socials.forEach((s, i) => {
@@ -391,7 +681,7 @@ class AirdoxCube {
       ctx.font = '36px serif'; ctx.fillStyle = '#ffffff'; ctx.fillText(s.icon, 90, y + 18);
       ctx.font = '600 30px "JetBrains Mono", monospace'; ctx.fillStyle = '#ffffff'; ctx.fillText(s.name, 160, y + 8);
       ctx.font = '300 22px "JetBrains Mono", monospace'; ctx.fillStyle = '#8890a0'; ctx.fillText(s.handle, 160, y + 52);
-      ctx.font = '400 30px sans-serif'; ctx.fillStyle = '#9d00ff'; ctx.textAlign = 'right'; ctx.fillText('→', W - 90, y + 22); ctx.textAlign = 'left';
+      ctx.font = '400 30px sans-serif'; ctx.fillStyle = '#9d00ff'; ctx.textAlign = 'right'; ctx.fillText('↗', W - 90, y + 22); ctx.textAlign = 'left';
     });
   }
 
@@ -403,7 +693,7 @@ class AirdoxCube {
     const eg = ctx.createLinearGradient(64, 300, 700, 300);
     eg.addColorStop(0, '#00d4ff'); eg.addColorStop(1, '#ff00aa');
     ctx.font = '700 40px Orbitron, sans-serif'; ctx.fillStyle = eg;
-    ctx.fillText('booking@airdox.berlin', 64, 300);
+    ctx.fillText('airdox82@gmail.com', 64, 300);
 
     const fields = ['NAME / PROMOTER', 'E-MAIL', 'VENUE · DATE', 'MESSAGE'];
     fields.forEach((f, i) => {
@@ -506,11 +796,21 @@ class AirdoxCube {
       const pt = e.touches ? e.touches[0] : e;
       const dx = pt.clientX - this.prevPointer.x;
       const dy = pt.clientY - this.prevPointer.y;
-      const s = 0.006;
-      this.cube.rotation.y += dx * s;
-      this.cube.rotation.x += dy * s;
-      this.cube.rotation.x = Math.max(-1.4, Math.min(1.4, this.cube.rotation.x));
-      this.velocity = { x: dy * s, y: dx * s };
+      
+      if (this.is2DMode && this.faceNames[this.currentFace] === 'LIVE SETS') {
+          const expandedHeight = this.expandedTrackIndex !== -1 && this.mixes[this.expandedTrackIndex].tracklist 
+                                 ? this.mixes[this.expandedTrackIndex].tracklist.length * 30 + 20 : 0;
+          const maxScroll = Math.max(0, (this.mixes.length * 70) + expandedHeight - 700);
+          this.targetListScrollY -= dy * 1.5; 
+          if (this.targetListScrollY < 0) this.targetListScrollY = 0;
+          if (this.targetListScrollY > maxScroll) this.targetListScrollY = maxScroll;
+      } else {
+          const s = 0.006;
+          this.cube.rotation.y += dx * s;
+          this.cube.rotation.x += dy * s;
+          this.cube.rotation.x = Math.max(-1.4, Math.min(1.4, this.cube.rotation.x));
+          this.velocity = { x: dy * s, y: dx * s };
+      }
       this.prevPointer = { x: pt.clientX, y: pt.clientY };
     };
 
@@ -539,12 +839,22 @@ class AirdoxCube {
     // Scroll wheel
     let wheelLock = false;
     window.addEventListener('wheel', (e) => {
+      if (this.is2DMode && this.faceNames[this.currentFace] === 'LIVE SETS') {
+          const expandedHeight = this.expandedTrackIndex !== -1 && this.mixes[this.expandedTrackIndex].tracklist 
+                                 ? this.mixes[this.expandedTrackIndex].tracklist.length * 30 + 20 : 0;
+          const maxScroll = Math.max(0, (this.mixes.length * 70) + expandedHeight - 700);
+          this.targetListScrollY += e.deltaY;
+          if (this.targetListScrollY < 0) this.targetListScrollY = 0;
+          if (this.targetListScrollY > maxScroll) this.targetListScrollY = maxScroll;
+          e.preventDefault(); 
+          return;
+      }
       if (wheelLock) return;
       wheelLock = true;
       setTimeout(() => (wheelLock = false), 700);
       if (this.is2DMode) this.exit2DMode();
       this.stepFace(e.deltaY > 0 ? 1 : -1);
-    }, { passive: true });
+    }, { passive: false });
 
     // Keyboard
     window.addEventListener('keydown', (e) => {
@@ -594,167 +904,303 @@ class AirdoxCube {
         const texX = uv.x * 1024;
         const texY = (1 - uv.y) * 1024;
         
-        for (let i = 0; i < 5; i++) {
-          const y = 300 + i * 115;
-          // Play button area roughly x:610-1000, y:y-20..y+60 (since X is 650)
-          if (texX > 610 && texX < 1000 && texY > y - 20 && texY < y + 60) {
-            this.playTrack(i);
+        let clickedPlaylist = false;
+        let startY = 200;
+        for (let i = 0; i < this.mixes.length; i++) {
+          const isExpanded = this.expandedTrackIndex === i;
+          const expandedHeight = (isExpanded && this.mixes[i].tracklist) ? this.mixes[i].tracklist.length * 30 + 20 : 0;
+          
+          if (texX > 80 && texX < 500 && texY >= 180 && texY <= 900) { // strictly inside clip
+            const adjustedTexY = texY + Math.floor(this.listScrollY);
+            if (adjustedTexY > startY - 20 && adjustedTexY < startY + 50) {
+               // Hit target detection: Did they click [+] right side or the name left side?
+               if (texX >= 430) {
+                   this.expandedTrackIndex = isExpanded ? -1 : i;
+                   this.redrawLiveSetsFull();
+               } else {
+                   this.playTrack(i);
+               }
+               clickedPlaylist = true;
+               break;
+            }
+          }
+          startY += 70 + expandedHeight;
+        }
+        
+        // Timeline clicks: x: 550 - 950, y: 760 - 840 (moved to right side)
+        if (!clickedPlaylist && this.audio && this.currentTrackIndex !== -1) {
+          if (texX > 530 && texX < 970 && texY > 760 && texY < 840) {
+            const pct = Math.max(0, Math.min(1, (texX - 550) / 400));
+            const dur = this.audio.duration;
+            if (dur && !isNaN(dur)) {
+               this.audio.currentTime = dur * pct;
+               if (this.audio.paused) this.playTrack(this.currentTrackIndex);
+               this.drawTimeline();
+            }
+          }
+        }
+      } else if (clickedFace === 4) { // SOCIAL
+        const uv = intersects[0].uv;
+        const texX = uv.x * 1024;
+        const texY = (1 - uv.y) * 1024;
+        const socials = [
+          'https://soundcloud.com/airdox',
+          'https://mixcloud.com/Airdox',
+          'https://instagram.com/airdox_bln',
+          'mailto:airdox82@gmail.com'
+        ];
+        for (let i = 0; i < 4; i++) {
+          const y = 300 + i * 135;
+          if (texX > 64 && texX < 960 && texY > y - 20 && texY < y + 105) {
+            window.open(socials[i], '_blank');
             break;
           }
+        }
+      } else if (clickedFace === 5) { // BOOKING
+        const uv = intersects[0].uv;
+        const texX = uv.x * 1024;
+        const texY = (1 - uv.y) * 1024;
+        // Button area: x: 64 to 960, y: 790 to 854
+        if (texX > 64 && texX < 960 && texY > 790 && texY < 854) {
+          window.location.href = 'mailto:airdox82@gmail.com';
         }
       }
     }
   }
 
   playTrack(index) {
-    if (!this.audioCtx) {
-      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 256;
-      this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
-      
+    if (!this.audio) {
       this.audio = new Audio();
-      this.audio.crossOrigin = "anonymous";
-      this.source = this.audioCtx.createMediaElementSource(this.audio);
-      this.source.connect(this.analyser);
-      this.analyser.connect(this.audioCtx.destination);
+      this.audio.style.display = 'none';
+      document.body.appendChild(this.audio); // Prevent mobile garbage collection
     }
-    
-    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+
     
     if (this.currentTrackIndex === index) {
-      if (this.audio.paused) this.audio.play();
-      else this.audio.pause();
+      if (this.audio.paused) {
+         this.audio.play().catch(e => console.error("Audio pause toggle blocked:", e));
+      } else {
+         this.audio.pause();
+      }
       this.redrawLiveSetsFull();
-      this.renderEqualizer(); // force exact state render
+      this.renderEqualizer();
+      this.updateGlobalPlayer();
       return;
     }
     
     this.currentTrackIndex = index;
-    this.audio.src = this.mixes[index].src; 
+    const track = this.mixes[index];
+    this.audio.src = track.src; 
+    
+    // Play immediately so Mobile Safari accepts it as a synchronous user gesture
     this.audio.play()
       .then(() => {
         this.redrawLiveSetsFull();
-        this.renderEqualizer();
+        this.updateGlobalPlayer();
       })
-      .catch(e => console.log("Audio Play blocked: ", e));
-    this.redrawLiveSetsFull(); // sofort triggern für Loading-Status
-    this.renderEqualizer();
+      .catch(e => console.error("Audio Play blocked:", e));
+      
+    // Sync with global stats API asynchronously afterwards
+    if (track.id) {
+      fetch('https://airdox.pages.dev/api/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: track.id, type: 'play' }),
+        mode: 'cors'
+      }).catch(err => console.log('Stats sync error:', err));
+    }
+
+    this.redrawLiveSetsFull();
+    this.updateGlobalPlayer();
   }
 
-  renderEqualizer() {
-    if (!this.liveCtx || !this.analyser) return;
+  drawTimeline() {
+    if (!this.liveCtx || !this.audio || this.currentTrackIndex === -1) return;
     const ctx = this.liveCtx;
     const W = 1024;
     
-    const cx = 350;
-    const cy = 520;
-    const rBase = 160;
-
     ctx.save();
-    
-    // Reset scale to logical coordinates
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(2, 2);
+    ctx.scale(2, 2); // default power of two scale
 
-    // We only clear the EQ region to save performance
-    // Rectangle: x=40, y=180, w=580, h=750
-    ctx.beginPath();
-    ctx.rect(40, 180, 580, 750);
-    ctx.clip();
-    
-    // Clear & background
-    ctx.clearRect(40, 180, 580, 750);
+    // Clear local rect on the right side for Visualizer and Timeline
+    ctx.clearRect(530, 200, 460, 750);
     ctx.fillStyle = '#0a0a18';
-    ctx.fillRect(40, 180, 580, 750);
-
+    ctx.fillRect(530, 200, 460, 750);
+    
     const grad = ctx.createLinearGradient(0, 0, W, W);
     grad.addColorStop(0, 'rgba(0,212,255,0.06)');
     grad.addColorStop(1, 'rgba(255,0,170,0.06)');
     ctx.fillStyle = grad;
-    ctx.fillRect(40, 180, 580, 750);
+    ctx.fillRect(530, 200, 460, 750);
 
-    // Draw Radial EQ
-    this.analyser.getByteFrequencyData(this.freqData);
+    const x = 550;
+    const y = 800; // timeline at bottom of right side
+    const w = 400; 
+    const h = 8;
     
+    const cur = this.audio.currentTime || 0;
+    const dur = this.audio.duration || 1;
+    const pct = cur / dur;
+
+    // Draw Radial Visualizer On Face
+    if (this.freqData) {
+      const cx = 750;
+      const cy = 480;
+      const rBase = 120;
+      const numBars = 80;
+      const angleStep = (Math.PI * 2) / numBars;
+      
+      let sumBass = 0;
+      for (let i = 0; i < 6; i++) sumBass += this.freqData[i];
+      let bassIntensity = Math.pow(sumBass / (6 * 255), 2);
+      
+      ctx.beginPath();
+      ctx.arc(cx, cy, rBase, 0, Math.PI * 2);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = `rgba(0, 212, 255, ${0.1 + bassIntensity * 0.3})`;
+      ctx.stroke();
+
+      ctx.lineCap = 'round';
+      const t = this.clock.getElapsedTime();
+      for (let i = 0; i < numBars; i++) {
+          const freqIndex = Math.floor(i * (150 / numBars));
+          const val = Math.max(0, (this.freqData[freqIndex] - 10) / 245.0); 
+          const rStart = rBase + 10;
+          const rEnd = rStart + val * 160; 
+          const angle = i * angleStep - Math.PI/2 + (t * 0.1); 
+          
+          ctx.beginPath();
+          ctx.moveTo(cx + rStart * Math.cos(angle), cy + rStart * Math.sin(angle));
+          ctx.lineTo(cx + rEnd * Math.cos(angle), cy + rEnd * Math.sin(angle));
+          
+          ctx.lineWidth = 6;
+          if (val > 0.8) {
+             ctx.strokeStyle = '#00ffea'; 
+             ctx.shadowColor = '#00ffea';
+          } else if (val > 0.4) {
+             ctx.strokeStyle = '#ff00aa'; 
+             ctx.shadowColor = '#ff00aa';
+          } else {
+             ctx.strokeStyle = '#00d4ff'; 
+             ctx.shadowColor = '#00d4ff';
+          }
+          ctx.shadowBlur = 10;
+          ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    // Track name (centered above timeline)
+    ctx.textAlign = 'center';
+    ctx.font = '700 24px Orbitron, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(this.mixes[this.currentTrackIndex].name, 750, y - 40);
+
+    // Background track
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(200,205,216,0.1)';
+    ctx.fillRect(x, y, w, h);
+    
+    // Filled track
+    ctx.fillStyle = '#ff00aa';
+    ctx.shadowColor = '#ff00aa';
+    ctx.shadowBlur = 10;
+    ctx.fillRect(x, y, w * pct, h);
+    ctx.shadowBlur = 0;
+    
+    // Handle
+    ctx.beginPath();
+    ctx.arc(x + w * pct, y + h/2, 10, 0, Math.PI*2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+
+    // Time text
+    const format = (t_val) => {
+       if (isNaN(t_val) || !isFinite(t_val)) return "00:00";
+       let m = Math.floor(t_val / 60);
+       let s = Math.floor(t_val % 60);
+       return (m < 10 ? '0'+m : m) + ':' + (s < 10 ? '0'+s : s);
+    };
+    
+    ctx.font = '300 18px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#e0e4ec';
+    ctx.fillText(format(cur), x, y + 40);
+    
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#8890a0';
+    ctx.fillText(format(dur), x + w, y + 40);
+    
+    ctx.restore();
+    if (this.liveTexture) this.liveTexture.needsUpdate = true;
+  }
+
+  renderEqualizer() {
+    if (!this.bgCtx || !this.freqData) return;
+    const ctx = this.bgCtx;
+    const w = this.bgCanvas.width;
+    const h = this.bgCanvas.height;
+    
+    // Clear global background
+    ctx.clearRect(0, 0, w, h);
+    
+    // Check if audio is running, otherwise don't draw
+    if(!this.audio || this.audio.paused) return;
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const rBase = Math.min(w, h) * 0.35; // Massive radial centered in background
+
+    ctx.save();
     ctx.translate(cx, cy);
 
-    // Inner glowing ring
-    ctx.beginPath();
-    ctx.arc(0, 0, rBase - 20, 0, Math.PI * 2);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
-    ctx.stroke();
+    // freqData already populated in tick() — no duplicate call
 
-    // Bars
-    // freqData has 256. We only use lower 120 to get bass/mids
-    const numBars = 64; 
+    const numBars = 120; // More bars for full background
     const angleStep = (Math.PI * 2) / numBars;
 
     ctx.lineCap = 'round';
     
     let sumBass = 0;
     for (let i = 0; i < 6; i++) sumBass += this.freqData[i];
-    let bassIntensity = sumBass / (6 * 255); // 0 to 1
+    let bassIntensity = Math.pow(sumBass / (6 * 255), 2);
+
+    // Inner glowing ring
+    ctx.beginPath();
+    ctx.arc(0, 0, rBase, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = `rgba(0, 212, 255, ${0.1 + bassIntensity * 0.3})`;
+    ctx.stroke();
 
     for (let i = 0; i < numBars; i++) {
-        const freqIndex = Math.floor(i * (120 / numBars));
-        const val = Math.max(0, (this.freqData[freqIndex] - 30) / 225.0); // 0 to 1, slight noise gate
+        const freqIndex = Math.floor(i * (150 / numBars));
+        const val = Math.max(0, (this.freqData[freqIndex] - 10) / 245.0); 
         
-        const rStart = rBase;
-        const rEnd = rBase + val * 160; // max length 160
+        const rStart = rBase + 10;
+        const rEnd = rStart + val * (Math.min(w, h) * 0.35); // Shoot outward towards screen edges
         
-        const angle = i * angleStep - Math.PI/2;
+        const angle = i * angleStep - Math.PI/2 + (this.clock.getElapsedTime() * 0.1); // Slow rotation
         
         ctx.beginPath();
         ctx.moveTo(rStart * Math.cos(angle), rStart * Math.sin(angle));
         ctx.lineTo(rEnd * Math.cos(angle), rEnd * Math.sin(angle));
         
-        // Color gradient based on val
-        ctx.lineWidth = 6;
-        if (val > 0.75) {
-           ctx.strokeStyle = '#00ffea'; // Cyan peak
+        ctx.lineWidth = 10;
+        if (val > 0.8) {
+           ctx.strokeStyle = '#00ffea'; 
            ctx.shadowColor = '#00ffea';
         } else if (val > 0.4) {
-           ctx.strokeStyle = '#ff00aa'; // Pink mid
+           ctx.strokeStyle = '#ff00aa'; 
            ctx.shadowColor = '#ff00aa';
         } else {
-           ctx.strokeStyle = '#00d4ff'; // Blue low
+           ctx.strokeStyle = '#00d4ff'; 
            ctx.shadowColor = '#00d4ff';
         }
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 20;
         ctx.stroke();
     }
     
-    // Center pulse
-    ctx.beginPath();
-    const pulseRad = 15 + (bassIntensity * (rBase - 35));
-    ctx.arc(0, 0, Math.max(10, pulseRad), 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(0, 212, 255, ${bassIntensity * 0.5})`;
-    ctx.shadowBlur = pulseRad !== 10 ? 40 * bassIntensity : 0;
-    ctx.shadowColor = '#00d4ff';
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    
-    // Draw running track text inside the circle
-    if (this.currentTrackIndex !== -1 && !this.audio.paused) {
-       ctx.rotate(this.clock.getElapsedTime() * 0.5); // spin slowly
-       ctx.font = '600 16px "JetBrains Mono", monospace';
-       ctx.fillStyle = '#ffffff';
-       ctx.textAlign = 'center';
-       ctx.textBaseline = 'middle';
-       ctx.fillText("▶ PLAY", 0, -rBase + 60);
-       ctx.fillText("AIRDOX", 0, rBase - 60);
-    } else {
-       ctx.font = '700 22px "JetBrains Mono", monospace';
-       ctx.fillStyle = 'rgba(0, 212, 255, 0.6)';
-       ctx.textAlign = 'center';
-       ctx.textBaseline = 'middle';
-       ctx.fillText("READY", 0, 0);
-    }
-    
     ctx.restore();
-    if (this.liveTexture) this.liveTexture.needsUpdate = true;
   }
 
   coastThenSnap() {
@@ -872,21 +1318,118 @@ class AirdoxCube {
   // ════════════════════════════════════
   //  LOADER
   // ════════════════════════════════════
+  // ════════════════════════════════════
+  //  C4: CINEMATIC INTRO ANIMATION
+  // ════════════════════════════════════
   runLoader() {
     const bar = document.getElementById('loaderBar');
     const pct = document.getElementById('loaderPct');
+    
+    // Hide cube during intro
+    this.cube.visible = false;
+    if (this.reflectionPlane) this.reflectionPlane.visible = false;
+    if (this.edgeLines) this.edgeLines.visible = false;
+    this.camera.position.set(0, 0, 20); // Start far away
+    
     let p = 0;
     const iv = setInterval(() => {
       p += Math.random() * 14 + 6;
-      if (p >= 100) { p = 100; clearInterval(iv); setTimeout(() => document.getElementById('loader').classList.add('done'), 400); }
+      if (p >= 100) {
+        p = 100; clearInterval(iv);
+        
+        // Phase 1: Fade out loader
+        setTimeout(() => {
+          document.getElementById('loader').classList.add('done');
+          
+          // Phase 2: Reveal cube with cinematic entrance
+          setTimeout(() => this.playCinematicIntro(), 300);
+        }, 400);
+      }
       bar.style.width = p + '%'; pct.textContent = Math.floor(p) + '%';
     }, 60);
+  }
+
+  playCinematicIntro() {
+    // Make cube visible but tiny
+    this.cube.visible = true;
+    if (this.reflectionPlane) this.reflectionPlane.visible = true;
+    if (this.edgeLines) this.edgeLines.visible = true;
+    
+    this.cube.scale.set(0, 0, 0);
+    this.cube.rotation.set(Math.PI * 2, Math.PI * 4, 0);
+    
+    // Particles burst outward
+    if (this.particles) {
+      this.particles.material.opacity = 0;
+      gsap.to(this.particles.material, { opacity: 0.35, duration: 2, ease: 'power2.inOut' });
+    }
+    
+    // Edge lines glow during intro
+    if (this.edgeLines) {
+      this.edgeLines.material.opacity = 1;
+      gsap.to(this.edgeLines.material, { opacity: 0.25, duration: 2.5, delay: 0.5, ease: 'power2.out' });
+    }
+    
+    // Dynamic bloom spike during entrance  
+    if (this.bloomPass) {
+      this.bloomPass.strength = 2.0;
+      gsap.to(this.bloomPass, { strength: 0.4, duration: 2.5, ease: 'power3.out' });
+    }
+    
+    // Main timeline: cube materializes
+    const tl = gsap.timeline();
+    
+    // Camera swoops in from far away
+    tl.to(this.camera.position, {
+      z: this.defaultCameraZ, duration: 2.5, ease: 'expo.out'
+    }, 0);
+    
+    // Cube scales up and rotates into position
+    tl.to(this.cube.scale, {
+      x: 1, y: 1, z: 1, duration: 2, ease: 'elastic.out(1, 0.6)'
+    }, 0.2);
+    
+    tl.to(this.cube.rotation, {
+      x: this.tiltX, y: this.tiltY, duration: 2.5, ease: 'expo.out'
+    }, 0.1);
+    
+    // Reflection plane fades in
+    if (this.reflectionPlane) {
+      this.reflectionPlane.material.opacity = 0;
+      tl.to(this.reflectionPlane.material, {
+        opacity: 0.4, duration: 1.5, ease: 'power2.inOut'
+      }, 0.8);
+    }
+    
+    // Trigger a final glitch burst at end of intro
+    tl.call(() => {
+      if (this.glitchPass) {
+        this._glitchActive = true;
+        this._glitchDuration = 0.3;
+      }
+    }, null, 1.8);
+  }
+
+  initBgVisualizer() {
+    this.bgCanvas = document.getElementById('bg-visualizer');
+    if(this.bgCanvas) {
+      this.bgCtx = this.bgCanvas.getContext('2d');
+      this.bgCanvas.width = window.innerWidth;
+      this.bgCanvas.height = window.innerHeight;
+    }
   }
 
   onResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    if (this.composer) {
+      this.composer.setSize(window.innerWidth, window.innerHeight);
+    }
+    if(this.bgCanvas) {
+      this.bgCanvas.width = Math.floor(window.innerWidth * 0.5);
+      this.bgCanvas.height = Math.floor(window.innerHeight * 0.5);
+    }
   }
 
   // ════════════════════════════════════
@@ -895,6 +1438,14 @@ class AirdoxCube {
   tick() {
     requestAnimationFrame(() => this.tick());
     const t = this.clock.getElapsedTime();
+
+    // Smooth Canvas Scrolling
+    if (Math.abs(this.listScrollY - this.targetListScrollY) > 0.5) {
+       this.listScrollY += (this.targetListScrollY - this.listScrollY) * 0.1;
+       if (this.is2DMode && this.faceNames[this.currentFace] === 'LIVE SETS') {
+           this.redrawLiveSetsFull();
+       }
+    }
 
     // Idle drift & Parallax (only in 3D mode)
     if (!this.isDragging && !this.is2DMode && !(this.snapAnim && this.snapAnim.isActive())) {
@@ -918,20 +1469,37 @@ class AirdoxCube {
 
     // Audio-mock light pulse & lighting transition
     let bass = 0;
-    const playing = this.analyser && this.audio && !this.audio.paused;
+    const playing = this.audio && !this.audio.paused;
     
     if (playing) {
-      this.analyser.getByteFrequencyData(this.freqData);
+      if (!this.freqData) this.freqData = new Uint8Array(128);
       
-      // Update EQ Visualizer dynamically every frame!
-      this.renderEqualizer();
+      // Artificial Bass Pulse Logic
+      for(let i = 0; i < this.freqData.length; i++) {
+          this.freqData[i] = (Math.sin(t * 8 + i * 0.2) * 0.5 + 0.5) * 128 + (Math.random() * 80);
+      }
+      
+      this.renderEqualizer(); // Background Fullscreen Visualizer
       
       let sum = 0;
       for (let i = 0; i < 6; i++) sum += this.freqData[i];
       bass = (sum / 6) / 255;
-      bass = Math.pow(bass, 3) * 1.5; // Enhance kick drum
+      bass = Math.pow(bass, 3) * 1.5; 
+      
+      this.updateGlobalPlayer(); // Keep UI in sync
+      if (this.currentFace === 2 && this.is2DMode) {
+          this.drawTimeline();
+      }
     } else {
       bass = Math.sin(t * 3) * 0.2 + 0.2; // Idle pulse
+    }
+
+    // Update global player strip
+    if (playing) this.updateGlobalPlayer();
+
+    // Dynamic bloom on bass
+    if (this.bloomPass) {
+      this.bloomPass.strength = playing ? 0.3 + bass * 1.2 : 0.4;
     }
     
     if (this.ambientLight) {
@@ -961,6 +1529,45 @@ class AirdoxCube {
       this.purpleLight.intensity = 1.2 * this.lightIntensity.point;
     }
 
+    // C3: Bass-reactive particles
+    if (this.particles && this._particleBasePositions) {
+      const positions = this.particles.geometry.attributes.position.array;
+      const base = this._particleBasePositions;
+      const expand = playing ? 1.0 + bass * 0.8 : 1.0;
+      const count = positions.length / 3;
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = base[i * 3] * expand;
+        positions[i * 3 + 1] = base[i * 3 + 1] * expand;
+        positions[i * 3 + 2] = base[i * 3 + 2] * expand;
+      }
+      this.particles.geometry.attributes.position.needsUpdate = true;
+      this.particles.material.size = playing ? 0.03 + bass * 0.06 : 0.03;
+      this.particles.material.opacity = playing ? 0.25 + bass * 0.5 : 0.35;
+    }
+
+    // C2: Glitch timing — random bursts every 5-8 seconds
+    if (this.glitchPass) {
+      const dt = this.clock.getDelta ? 1/60 : 1/60; // approximate
+      this.glitchPass.uniforms.uTime.value = t;
+      
+      if (this._glitchActive) {
+        this._glitchDuration -= 0.016;
+        const intensity = Math.max(0, this._glitchDuration / 0.3);
+        this.glitchPass.uniforms.uIntensity.value = intensity * (0.5 + Math.random() * 0.5);
+        if (this._glitchDuration <= 0) {
+          this._glitchActive = false;
+          this.glitchPass.uniforms.uIntensity.value = 0;
+          this._glitchTimer = 5 + Math.random() * 3; // Next glitch in 5-8s
+        }
+      } else {
+        this._glitchTimer -= 0.016;
+        if (this._glitchTimer <= 0) {
+          this._glitchActive = true;
+          this._glitchDuration = 0.15 + Math.random() * 0.2; // 150-350ms burst
+        }
+      }
+    }
+
     if (this.edgeLines) {
         this.edgeLines.material.opacity = (0.15 + bass * 0.2) * this.lightIntensity.point;
     }
@@ -969,6 +1576,6 @@ class AirdoxCube {
     const prog = ((this.cube.rotation.y % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     document.getElementById('progress-bar').style.width = (prog / (Math.PI * 2)) * 100 + '%';
 
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   }
 }

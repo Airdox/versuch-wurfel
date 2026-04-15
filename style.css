@@ -69,6 +69,12 @@ body::after {
 .amb3 { width: 40vw; height: 40vw; background: var(--neon-purple); top: 30%; left: 30%; animation-delay: -14s; }
 @keyframes blobFloat { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(80px,60px) scale(1.15); } }
 
+/* ═══ BACKGROUND VISUALIZER ═══ */
+#bg-visualizer {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  z-index: 2; pointer-events: none; opacity: 0.6; mix-blend-mode: screen;
+}
+
 /* ═══ NAVIGATION ═══ */
 nav {
   position: fixed; top: 0; left: 0; width: 100%;
@@ -296,3 +302,60 @@ nav {
 }
 
 .pointer-events-none { pointer-events: none; }
+
+/* ═══ GLOBAL AUDIO PLAYER ═══ */
+#global-player {
+  position: fixed; top: 0; left: 0; width: 100%; z-index: 300;
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 24px;
+  background: rgba(4, 4, 12, 0.75);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.12);
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: transform 0.5s cubic-bezier(0.175,0.885,0.32,1.275), opacity 0.4s;
+  pointer-events: auto;
+}
+#global-player.visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+#gp-play {
+  width: 32px; height: 32px; flex-shrink: 0;
+  border: 1px solid rgba(0, 212, 255, 0.3); border-radius: 50%;
+  background: rgba(0, 212, 255, 0.08); color: var(--neon-blue);
+  font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.3s;
+}
+#gp-play:hover {
+  background: rgba(0, 212, 255, 0.2);
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+  transform: scale(1.1);
+}
+#gp-info {
+  display: flex; flex-direction: column; gap: 1px; min-width: 140px;
+}
+#gp-title {
+  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.1em; color: var(--chrome-bright);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#gp-time {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: var(--chrome-subtle); letter-spacing: 0.05em;
+}
+#gp-progress-wrap {
+  flex: 1; height: 4px; background: rgba(200, 205, 216, 0.08);
+  border-radius: 2px; cursor: pointer; overflow: hidden;
+  min-width: 80px;
+}
+#gp-progress {
+  height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--neon-blue), var(--neon-pink));
+  border-radius: 2px;
+  box-shadow: 0 0 6px rgba(0, 212, 255, 0.4);
+  transition: width 0.15s linear;
+}
+
+@keyframes logoShimmer { 0% { background-position: 0% center; } 100% { background-position: 200% center; } }
