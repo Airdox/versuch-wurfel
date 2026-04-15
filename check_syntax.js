@@ -15,7 +15,7 @@ for (let ln = 0; ln < lines.length; ln++) {
     if (c === '/' && line[i+1] === '/') { inC = true; continue; }
     if (c === '/' && line[i+1] === '*') { inBC = true; continue; }
     if (inStr) { if (c === sc && pr !== '\\') inStr = false; continue; }
-    if (c === "'" || c === '"') { inStr = true; sc = c; continue; }
+    if (c === "'" || c === '"' || c === '`') { inStr = true; sc = c; continue; }
     if (c === '{') b++;
     if (c === '}') b--;
     if (c === '(') p++;

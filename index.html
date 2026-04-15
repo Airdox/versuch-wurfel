@@ -3,93 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="AIRDOX — Berlin Underground Techno DJ & Producer. Interaktive 3D-Navigation.">
+    <meta name="description" content="AIRDOX — Berlin Underground Techno DJ & Producer. Ultimate Coherence Edition.">
     <title>AIRDOX — Berlin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&family=Orbitron:wght@900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
 
-
     <!-- CURSOR -->
     <div id="cur"></div>
-    <div id="cur-ring"></div>
 
     <!-- LOADER -->
     <div id="loader">
         <div class="loader-content">
             <div class="loader-name">AIRDOX</div>
             <div class="loader-bar-wrap"><div class="loader-bar" id="loaderBar"></div></div>
-            <div class="loader-pct" id="loaderPct">0%</div>
         </div>
-    </div>
-
-    <!-- AMBIENT -->
-    <div class="ambient">
-        <div class="amb-blob amb1"></div>
-        <div class="amb-blob amb2"></div>
-        <div class="amb-blob amb3"></div>
     </div>
 
     <!-- BACKGROUND VISUALIZER -->
     <canvas id="bg-visualizer"></canvas>
 
-    <!-- PROGRESS BAR -->
-    <div id="progress-bar"></div>
+    <!-- GLOBAL VIGNETTE -->
+    <div id="global-vignette"></div>
 
-    <!-- HERO SECTION -->
-    <div class="hero-title-container" id="heroTitle">
-        <h1 class="hero-name">AIRDOX</h1>
-        <div class="hero-sub">BERLIN UNDERGROUND</div>
+    <!-- HERO SECTION (Sektor: TOP) -->
+    <div class="hero-section" id="heroTitle">
+        <div class="logo-wrap">
+            <svg class="snake-logo" viewBox="0 0 850 140">
+                <defs>
+                    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#ff00aa;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <text x="50%" y="100" text-anchor="middle" class="logo-base">AIRDOX</text>
+                <text x="50%" y="100" text-anchor="middle" class="logo-snake">AIRDOX</text>
+            </svg>
+        </div>
+        <div class="hero-subtext">BERLIN UNDERGROUND TECHNO ARCHITECTURE</div>
     </div>
 
-    <!-- NAV -->
+    <!-- 3D SCENE (Sektor: CENTER) -->
+    <main id="scene-container"></main>
+
+    <!-- UI HUD (Sektor: BOTTOM) -->
+    <div id="ui-layer">
+        <div class="face-dots" id="faceDots">
+            <button class="face-dot active" data-face="0"></button>
+            <button class="face-dot" data-face="1"></button>
+            <button class="face-dot" data-face="2"></button>
+            <button class="face-dot" data-face="3"></button>
+            <button class="face-dot" data-face="4"></button>
+            <button class="face-dot" data-face="5"></button>
+        </div>
+        
+        <div class="stats-label" id="statsLabel">AIRDOX // PLAYS: 0</div>
+
+        <div class="cube-controls">
+            <button class="cc-btn" id="prevBtn">PREV</button>
+            <button class="cc-face-name" id="faceName">IDENTITY</button>
+            <button class="cc-btn" id="nextBtn">NEXT</button>
+        </div>
+    </div>
+
     <nav>
         <button class="hamburger" id="hamburgerBtn">
             <span></span><span></span><span></span>
         </button>
     </nav>
 
-    <!-- FULLSCREEN NAV OVERLAY -->
     <div class="nav-overlay" id="navOverlay">
-        <button data-face="0" data-num="01" class="active">Identity</button>
-        <button data-face="1" data-num="02">About</button>
-        <button data-face="2" data-num="03">Live Sets</button>
-        <button data-face="3" data-num="04">Studio</button>
-        <button data-face="4" data-num="05">Social</button>
-        <button data-face="5" data-num="06">Booking</button>
-    </div>
-
-    <!-- 3D SCENE -->
-    <main id="scene-container"></main>
-
-    <!-- 2D MODE OVERLAY (dims background when zoomed in) -->
-    <div id="mode-2d-overlay"></div>
-    <div class="mode-2d-hint" id="mode2dHint">Drag to return to 3D</div>
-
-    <!-- BOTTOM UI -->
-    <div id="ui-layer" class="pointer-events-none">
-        <div class="section-label">Navigate the Cube</div>
-        <div class="face-dots" id="faceDots">
-            <button class="face-dot active" data-face="0" title="Identity"></button>
-            <button class="face-dot" data-face="1" title="About"></button>
-            <button class="face-dot" data-face="2" title="Live Sets"></button>
-            <button class="face-dot" data-face="3" title="Studio"></button>
-            <button class="face-dot" data-face="4" title="Social"></button>
-            <button class="face-dot" data-face="5" title="Booking"></button>
-        </div>
-        <div class="cube-controls">
-            <button class="cc-btn" id="prevBtn">←</button>
-            <button class="cc-face-name" id="faceName">IDENTITY</button>
-            <button class="cc-btn" id="nextBtn">→</button>
-        </div>
-    </div>
-
-    <!-- KEYBOARD HINT -->
-    <div class="keyboard-hint">
-        <kbd>←</kbd> <kbd>→</kbd> navigate · click name for 2D · drag to rotate
+        <button data-face="0" class="active">Identity</button>
+        <button data-face="1">About</button>
+        <button data-face="2">Live Sets</button>
+        <button data-face="3">Studio</button>
+        <button data-face="4">Social</button>
+        <button data-face="5">Booking</button>
     </div>
 
     <script type="module" src="./main.js"></script>
