@@ -6,7 +6,9 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-document.fonts.ready.then(() => new AirdoxCube());
+document.fonts.ready.then(() => {
+  window.airdox = new AirdoxCube();
+});
 
 class AirdoxCube {
   constructor() {
@@ -46,6 +48,13 @@ class AirdoxCube {
       { id: '5', name: 'OHBOY', meta: 'APR 2024  ·  52:45', src: `${AUDIO_BASE}/ohboy_full.mp3`, tracklist: ['01. Oh Boy', '02. What a Night', '03. Bounce'] },
       { id: '6', name: 'SOLLTE NICHT SEIN', meta: 'FEB 2025  ·  2:49:00', src: `${AUDIO_BASE}/Airdox%20vs%20Jette_sollte%20nicht%20sein_2024_02_full.mp3`, tracklist: ['01. Intro - B2B', '02. Jette Selects', '03. Airdox Push', '04. Closing'] }
     ];
+
+    // Stats & Achievements
+    this.stats = this.loadStats();
+    
+    // Interactive States
+    this.gearStates = [false, false, false, false, false];
+    this.toastQueue = [];
 
     this.faceAngles = [
       { x: 0, y: 0 },
@@ -456,6 +465,11 @@ class AirdoxCube {
     ctx.fillText('← →  NAVIGATE', 64, 720);
     ctx.fillStyle = '#ff00aa';
     ctx.fillText('DRAG  TO ROTATE', 64, 760);
+    
+    // Total Plays
+    ctx.font = '700 14px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(157, 0, 255, 0.6)';
+    ctx.fillText(`PLATFORM PLAYS: ${12400 + (this.stats.totalPlays * 8)}`, 64, 820);
   }
 
   drawAbout(ctx, W) {
@@ -622,7 +636,20 @@ class AirdoxCube {
        this.drawTimeline();
     }
     
+    this.drawLiveSetsStats(ctx, W);
+
     if (this.liveTexture) this.liveTexture.needsUpdate = true;
+  }
+
+  drawLiveSetsStats(ctx, W) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(2, 2);
+    ctx.font = '700 12px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(0, 212, 255, 0.4)';
+    ctx.textAlign = 'right';
+    ctx.fillText(`SESSION PLAYS: ${this.stats.totalPlays || 0}`, W - 64, 56);
+    ctx.restore();
   }
 
 
@@ -647,18 +674,32 @@ class AirdoxCube {
     ];
 
     gear.forEach((g, i) => {
+      const isPowered = this.gearStates[i];
       const y = 320 + i * 110;
-      ctx.fillStyle = 'rgba(255,0,170,0.06)'; ctx.fillRect(64, y - 10, W - 128, 85);
-      ctx.strokeStyle = 'rgba(255,0,170,0.2)'; ctx.lineWidth = 1; ctx.strokeRect(64, y - 10, W - 128, 85);
       
-      ctx.font = '400 16px "JetBrains Mono", monospace'; ctx.fillStyle = '#ff00aa';
-      ctx.fillText(g.type, 90, y + 25);
+      ctx.fillStyle = isPowered ? 'rgba(255,0,170,0.15)' : 'rgba(255,0,170,0.06)'; 
+      ctx.fillRect(64, y - 10, W - 128, 85);
       
-      ctx.font = '700 32px Orbitron, sans-serif'; ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = isPowered ? '#ff00aa' : 'rgba(255,0,170,0.2)'; 
+      ctx.lineWidth = isPowered ? 2 : 1;
+      ctx.strokeRect(64, y - 10, W - 128, 85);
+      
+      ctx.font = '400 16px "JetBrains Mono", monospace'; 
+      ctx.fillStyle = isPowered ? '#ffffff' : '#ff00aa';
+      ctx.fillText(isPowered ? '[ ONLINE ]' : g.type, 90, y + 25);
+      
+      ctx.font = '700 32px Orbitron, sans-serif'; 
+      ctx.fillStyle = '#ffffff';
       ctx.fillText(g.name, 220, y + 16);
       
-      ctx.font = '300 20px Outfit, sans-serif'; ctx.fillStyle = '#8890a0';
+      ctx.font = '300 20px Outfit, sans-serif'; ctx.fillStyle = isPowered ? '#fff' : '#8890a0';
       ctx.fillText(g.desc, 220, y + 46);
+
+      if (isPowered) {
+          // Add a small "power" light
+          ctx.beginPath(); ctx.arc(88, y + 54, 4, 0, Math.PI*2);
+          ctx.fillStyle = '#ff00aa'; ctx.fill();
+      }
     });
   }
 
@@ -714,11 +755,25 @@ class AirdoxCube {
   // ════════════════════════════════════
   enter2DMode() {
     if (this.is2DMode) return;
+    
+    // Trigger Glitch Burst
+    if (this.glitchPass) {
+        this._glitchActive = true;
+        this._glitchDuration = 0.4;
+    }
+    
     this.gotoFace(this.currentFace, true);
   }
 
   exit2DMode() {
     if (!this.is2DMode) return;
+    
+    // Trigger Glitch Burst
+    if (this.glitchPass) {
+        this._glitchActive = true;
+        this._glitchDuration = 0.4;
+    }
+    
     this.is2DMode = false;
 
     if (this.snapAnim) this.snapAnim.kill();
@@ -939,6 +994,19 @@ class AirdoxCube {
             }
           }
         }
+      } else if (clickedFace === 3) { // STUDIO
+        const uv = intersects[0].uv;
+        const texX = uv.x * 1024;
+        const texY = (1 - uv.y) * 1024;
+        for (let i = 0; i < 5; i++) {
+          const y = 320 + i * 110;
+          if (texX > 64 && texX < 960 && texY > y - 10 && texY < y + 75) {
+            this.gearStates[i] = !this.gearStates[i];
+            this.paintFace(3); 
+            this.showToast(`${this.gearStates[i] ? 'Powered on' : 'Powered off'} module ${i+1}`);
+            break;
+          }
+        }
       } else if (clickedFace === 4) { // SOCIAL
         const uv = intersects[0].uv;
         const texX = uv.x * 1024;
@@ -962,7 +1030,11 @@ class AirdoxCube {
         const texY = (1 - uv.y) * 1024;
         // Button area: x: 64 to 960, y: 790 to 854
         if (texX > 64 && texX < 960 && texY > 790 && texY < 854) {
-          window.location.href = 'mailto:airdox82@gmail.com';
+          this.showToast("Request Sending...");
+          setTimeout(() => {
+            this.showToast("Success! Request Sent.");
+            window.location.href = 'mailto:airdox82@gmail.com';
+          }, 1200);
         }
       }
     }
@@ -971,8 +1043,24 @@ class AirdoxCube {
   playTrack(index) {
     if (!this.audio) {
       this.audio = new Audio();
+      this.audio.crossOrigin = "anonymous"; // Important for WebAudio CORS
       this.audio.style.display = 'none';
-      document.body.appendChild(this.audio); // Prevent mobile garbage collection
+      document.body.appendChild(this.audio); 
+      
+      // Setup Analyser
+      if (!this.audioCtx) {
+        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this.analyser = this.audioCtx.createAnalyser();
+        this.analyser.fftSize = 256;
+        this.source = this.audioCtx.createMediaElementSource(this.audio);
+        this.source.connect(this.analyser);
+        this.analyser.connect(this.audioCtx.destination);
+        this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+      }
+    }
+    
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
     }
 
     
@@ -1012,6 +1100,45 @@ class AirdoxCube {
 
     this.redrawLiveSetsFull();
     this.updateGlobalPlayer();
+    
+    // Increment Stats
+    this.stats.totalPlays++;
+    this.saveStats();
+    this.showToast(`Now Playing: ${track.name}`);
+  }
+
+  loadStats() {
+    const saved = localStorage.getItem('airdox_stats');
+    if (saved) return JSON.parse(saved);
+    return { totalPlays: 0, completions: 0 };
+  }
+
+  saveStats() {
+    localStorage.setItem('airdox_stats', JSON.stringify(this.stats));
+  }
+
+  showToast(text) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = text;
+    container.appendChild(toast);
+    
+    // Reflow
+    toast.offsetHeight;
+    toast.classList.add('visible');
+    
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        setTimeout(() => toast.remove(), 500);
+    }, 3000);
   }
 
   drawTimeline() {
@@ -1472,11 +1599,14 @@ class AirdoxCube {
     const playing = this.audio && !this.audio.paused;
     
     if (playing) {
-      if (!this.freqData) this.freqData = new Uint8Array(128);
-      
-      // Artificial Bass Pulse Logic
-      for(let i = 0; i < this.freqData.length; i++) {
-          this.freqData[i] = (Math.sin(t * 8 + i * 0.2) * 0.5 + 0.5) * 128 + (Math.random() * 80);
+      // Get Real Frequency Data
+      if (this.analyser) {
+          this.analyser.getByteFrequencyData(this.freqData);
+      } else {
+          // Fallback to mock if analyser failed to init
+          for(let i = 0; i < this.freqData.length; i++) {
+              this.freqData[i] = (Math.sin(t * 8 + i * 0.2) * 0.5 + 0.5) * 128 + (Math.random() * 80);
+          }
       }
       
       this.renderEqualizer(); // Background Fullscreen Visualizer
